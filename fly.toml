@@ -6,8 +6,6 @@
 app = 'studymatch-api'
 primary_region = 'lhr'
 
-[build]
-  builder = 'python'
 
 [env]
   PORT = '8080'
