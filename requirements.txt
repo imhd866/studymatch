@@ -1,6 +1,21 @@
+<<<<<<< HEAD
+streamlit
+transformers
+torch
+pandas
+numpy
 streamlit
 transformers
 torch
 pandas
 numpy
 scikit-learn
+uvicorn
+=======
+streamlit
+transformers
+torch
+pandas
+numpy
+scikit-learn
+>>>>>>> 0fe2869d6a22b3da40b2e4445489603e0c42f7fd
