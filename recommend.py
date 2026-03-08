@@ -7,20 +7,33 @@ from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-# === Config ===
+# ========== Config ========== #
 MODEL_NAME = "allenai/specter2_base"
-DATA_PATH = "cleaned_arxiv_large.csv"
-EMBED_PATH = "specter_embeddings_large.npz"
 TOP_N = 10
 KEYWORDS = ['spiking', 'neuromorphic', 'Josephson', 'superconduct', 'quantum', 'edge']
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# ========== Streamlit UI Setup ========== #
 st.title("📚 StudyMatch: Academic Paper Recommender")
 st.markdown("""
 Enter a research interest, paper title, or abstract to get scholarly recommendations.
-This version uses semantic embeddings (SPECTER2), TF-IDF keyword expansion, MMR diversification, and keyword-aware reranking.
+This version uses semantic embeddings (SPECTER), TF-IDF keyword expansion, MMR diversification, and keyword-aware reranking.
 """)
 
+# ========== File Upload ========== #
+st.sidebar.header("📂 Upload Files")
+uploaded_csv = st.sidebar.file_uploader("Upload cleaned_arxiv_large.csv", type=["csv"])
+uploaded_npz = st.sidebar.file_uploader("Upload specter_embeddings_large.npz", type=["npz"])
+
+if uploaded_csv is not None and uploaded_npz is not None:
+    df = pd.read_csv(uploaded_csv)
+    embed_data = np.load(uploaded_npz)
+    embeddings = embed_data["embeddings"]
+else:
+    st.warning("Please upload both the `.csv` and `.npz` files in the sidebar to continue.")
+    st.stop()
+
+# ========== Load Model ========== #
 @st.cache_resource
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -28,23 +41,9 @@ def load_model():
     model.eval()
     return tokenizer, model
 
-@st.cache_data
-def load_data():
-    df = pd.read_csv(DATA_PATH)
-    embed_data = np.load(EMBED_PATH)
-    embeddings = embed_data['embeddings']
-    return df, embeddings
-
 tokenizer, model = load_model()
-df, embeddings = load_data()
 
-# === Helpers ===
-def clean_arxiv_id(raw_id):
-    if isinstance(raw_id, str):
-        match = re.search(r'(\d{4}\.\d{4,5})', raw_id)  # e.g. 2301.12345
-        return match.group(1) if match else raw_id
-    return str(raw_id)
-
+# ========== Core Functions ========== #
 def embed_text(text):
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
@@ -92,6 +91,12 @@ def mmr_diversify(query_vec, candidate_vecs, top_k=10, lambda_param=0.7):
         remaining.remove(next_doc)
     return selected
 
+def clean_arxiv_id(raw_id):
+    if isinstance(raw_id, str):
+        match = re.search(r'(\d{4}\.\d{4,5})', raw_id)  # e.g. 2301.12345
+        return match.group(1) if match else raw_id
+    return str(raw_id)
+
 def recommend(query_text, df, embeddings, top_n=TOP_N):
     df_filtered = df.reset_index(drop=True)
     expanded_query, _ = expand_query_with_top_keywords(query_text, df_filtered, embeddings)
@@ -104,7 +109,7 @@ def recommend(query_text, df, embeddings, top_n=TOP_N):
     final_indices = [top_indices[i] for i in diversified]
     return df_filtered.iloc[final_indices].assign(score=sims[final_indices])
 
-# === UI Logic ===
+# ========== Streamlit Interactive Input ========== #
 query = st.text_area("Enter your research topic or abstract:", height=200)
 
 if st.button("Get Recommendations") and query:
@@ -112,7 +117,7 @@ if st.button("Get Recommendations") and query:
         results = recommend(query, df, embeddings)
     st.success(f"Top {TOP_N} Recommended Papers")
 
-    results['id'] = results['id'].apply(clean_arxiv_id)  # 🧼 fix malformed IDs
+    results['id'] = results['id'].apply(clean_arxiv_id)  # Ensure valid arXiv links
 
     for _, row in results.iterrows():
         arxiv_url = f"https://arxiv.org/abs/{row['id']}"
