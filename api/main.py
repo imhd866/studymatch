@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
-from model_utils import generate_recommendations
-from model_utils import recommend_papers
+from api.model_utils import generate_recommendations
+from api.model_utils import recommend_papers
 
 app = FastAPI()
 
