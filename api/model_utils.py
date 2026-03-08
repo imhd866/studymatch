@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import torch
@@ -71,3 +72,12 @@ def generate_recommendations(query, df, embeddings, top_n=TOP_N):
     diversified = mmr_diversify(q_embed, candidate_vecs, top_k=top_n)
     final_indices = [top_indices[i] for i in diversified]
     return df.iloc[final_indices].assign(score=sims[final_indices])
+
+def recommend_papers(query):
+    # Load preprocessed data once
+    df = pd.read_csv("backend/data/cleaned_arxiv_large.csv")
+    embed1 = np.load("backend/embeddings/specter_embeddings_part1.npz")["embeddings"]
+    embed2 = np.load("backend/embeddings/specter_embeddings_part2.npz")["embeddings"]
+    embeddings = np.vstack([embed1, embed2])
+    
+    return generate_recommendations(query, df, embeddings)

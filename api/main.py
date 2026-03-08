@@ -18,12 +18,21 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
 
-@app.post("/recommend")
-def recommend(request: QueryRequest):
-    try:
-        df = pd.read_csv("backend/embeddings/cleaned_arxiv_large.csv")
-        embeddings = np.load("backend/embeddings/specter_embeddings_combined.npz")["embeddings"]
-        results = generate_recommendations(request.query, df, embeddings)
-        return results.to_dict(orient="records")
-    except Exception as e:
-        return {"error": str(e)}
+@app.post("/api/recommend")
+def recommend_endpoint(request: QueryRequest):
+    query = request.query
+    results = recommend_papers(query)
+
+    response = []
+    for paper in results:
+        response.append({
+            "id": paper["id"],
+            "title": paper["title"],
+            "authors": paper.get("authors", "Unknown"),
+            "categories": paper.get("categories", "N/A"),
+            "abstract": paper["abstract"],
+            "score": float(paper["score"]),
+            "url": f"https://arxiv.org/abs/{paper['id']}",
+        })
+    
+    return {"results": response}
