@@ -20,17 +20,22 @@ Enter a research interest, paper title, or abstract to get scholarly recommendat
 This version uses semantic embeddings (SPECTER), TF-IDF keyword expansion, MMR diversification, and keyword-aware reranking.
 """)
 
-# ========== File Upload ========== #
-st.sidebar.header("📂 Upload Files")
-uploaded_csv = st.sidebar.file_uploader("Upload cleaned_arxiv_large.csv", type=["csv"])
-uploaded_npz = st.sidebar.file_uploader("Upload specter_embeddings_large.npz", type=["npz"])
+# ========== Sidebar File Uploads ========== #
+st.sidebar.header("📁 Upload Files")
 
-if uploaded_csv is not None and uploaded_npz is not None:
+uploaded_csv = st.sidebar.file_uploader("Upload cleaned_arxiv_large.csv", type=["csv"])
+uploaded_part1 = st.sidebar.file_uploader("Upload specter_embeddings_part1.npz", type=["npz"])
+uploaded_part2 = st.sidebar.file_uploader("Upload specter_embeddings_part2.npz", type=["npz"])
+
+if uploaded_csv and uploaded_part1 and uploaded_part2:
     df = pd.read_csv(uploaded_csv)
-    embed_data = np.load(uploaded_npz)
-    embeddings = embed_data["embeddings"]
+    data1 = np.load(uploaded_part1)
+    data2 = np.load(uploaded_part2)
+
+    embeddings = np.vstack([data1["embeddings"], data2["embeddings"]])
+    ids = np.concatenate([data1["ids"], data2["ids"]])
 else:
-    st.warning("Please upload both the `.csv` and `.npz` files in the sidebar to continue.")
+    st.warning("Please upload the `.csv`, `part1.npz`, and `part2.npz` files in the sidebar.")
     st.stop()
 
 # ========== Load Model ========== #
@@ -80,8 +85,7 @@ def mmr_diversify(query_vec, candidate_vecs, top_k=10, lambda_param=0.7):
         mmr_scores = []
         for i in remaining:
             sim_to_query = sims_to_query[i]
-            sim_to_selected = max(cosine_similarity(candidate_vecs[i].reshape(1, -1),
-                                                    candidate_vecs[selected])[0])
+            sim_to_selected = max(cosine_similarity(candidate_vecs[i].reshape(1, -1), candidate_vecs[selected])[0])
             mmr_score = lambda_param * sim_to_query - (1 - lambda_param) * sim_to_selected
             mmr_scores.append((i, mmr_score))
         if not mmr_scores:
@@ -90,12 +94,6 @@ def mmr_diversify(query_vec, candidate_vecs, top_k=10, lambda_param=0.7):
         selected.append(next_doc)
         remaining.remove(next_doc)
     return selected
-
-def clean_arxiv_id(raw_id):
-    if isinstance(raw_id, str):
-        match = re.search(r'(\d{4}\.\d{4,5})', raw_id)  # e.g. 2301.12345
-        return match.group(1) if match else raw_id
-    return str(raw_id)
 
 def recommend(query_text, df, embeddings, top_n=TOP_N):
     df_filtered = df.reset_index(drop=True)
@@ -109,16 +107,13 @@ def recommend(query_text, df, embeddings, top_n=TOP_N):
     final_indices = [top_indices[i] for i in diversified]
     return df_filtered.iloc[final_indices].assign(score=sims[final_indices])
 
-# ========== Streamlit Interactive Input ========== #
+# ========== UI Input & Output ========== #
 query = st.text_area("Enter your research topic or abstract:", height=200)
 
 if st.button("Get Recommendations") and query:
     with st.spinner("Generating recommendations..."):
         results = recommend(query, df, embeddings)
     st.success(f"Top {TOP_N} Recommended Papers")
-
-    results['id'] = results['id'].apply(clean_arxiv_id)  # Ensure valid arXiv links
-
     for _, row in results.iterrows():
         arxiv_url = f"https://arxiv.org/abs/{row['id']}"
         st.markdown(f"**[{row['title']}]({arxiv_url})**")
